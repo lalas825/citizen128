@@ -3,6 +3,9 @@ import 'package:google_fonts/google_fonts.dart';
 import '../../services/stats_service.dart';
 import 'quiz_screen.dart';
 import 'review_errors_screen.dart';
+import 'study_screen.dart';
+import 'profile_screen.dart';
+import 'n400_vocab_screen.dart'; // Import for N-400
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -12,25 +15,47 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> {
+  int _currentIndex = 0;
+  
+  // Dashboard State
   double _passProbability = 0.0;
   String _statusLabel = "Start Practicing";
   bool _isPassed = false;
   Color _statusColor = Colors.grey;
 
+  final List<Widget> _screens = [
+     Container(), // Placeholder for Dashboard (index 0)
+     const StudyScreen(),
+     const ProfileScreen(),
+  ];
+
+  String _userName = "";
+
   @override
   void initState() {
     super.initState();
     _loadStats();
+    _loadProfile();
+  }
+
+  Future<void> _loadProfile() async {
+    final prefs = await SharedPreferences.getInstance();
+    setState(() {
+      _userName = prefs.getString('user_name') ?? "";
+    });
   }
 
   Future<void> _loadStats() async {
     final stats = await StatsService.getStats();
+    // Also reload name in case it changed in Profile tab
+    final prefs = await SharedPreferences.getInstance(); 
+    
     if (!mounted) return;
     setState(() {
+      _userName = prefs.getString('user_name') ?? "";
       _passProbability = stats['average_score'];
       _isPassed = stats['passed'];
       
-      // label logic
       if (stats['total_attempts'] == 0) {
         _statusLabel = "Start Practicing";
         _statusColor = Colors.grey;
@@ -41,8 +66,45 @@ class _HomeScreenState extends State<HomeScreen> {
     });
   }
 
+  void _onTabTapped(int index) {
+    setState(() {
+      _currentIndex = index;
+    });
+    // Reload stats/name when switching back to home
+    if (index == 0) {
+      _loadStats();
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
+    final Color federalBlue = const Color(0xFF112D50);
+
+    return Scaffold(
+      backgroundColor: const Color(0xFFF8FAFC),
+      body: IndexedStack(
+        index: _currentIndex,
+        children: [
+          _buildDashboard(), // Index 0
+          const StudyScreen(), // Index 1
+          const ProfileScreen(), // Index 2
+        ],
+      ),
+      bottomNavigationBar: BottomNavigationBar(
+        currentIndex: _currentIndex,
+        onTap: _onTabTapped,
+        selectedItemColor: federalBlue,
+        unselectedItemColor: Colors.grey,
+        items: const [
+          BottomNavigationBarItem(icon: Icon(Icons.dashboard), label: "Home"),
+          BottomNavigationBarItem(icon: Icon(Icons.school), label: "Study"),
+          BottomNavigationBarItem(icon: Icon(Icons.person), label: "Profile"),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildDashboard() {
     final Color federalBlue = const Color(0xFF112D50);
     final Color libertyGreen = const Color(0xFF00C4B4);
     final Color bgLight = const Color(0xFFF8FAFC);
@@ -58,26 +120,28 @@ class _HomeScreenState extends State<HomeScreen> {
         actions: [
           IconButton(
               icon: Icon(Icons.refresh, color: federalBlue), 
-              onPressed: _loadStats) // Validation helper
+              onPressed: _loadStats)
         ],
       ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(20),
         child: Column(
           children: [
-            // PROFILE
+            // PROFILE HEADER
             Row(
               children: [
                 CircleAvatar(
                     radius: 30,
                     backgroundColor: Colors.grey.shade300,
-                    child: Icon(Icons.person,
-                        size: 35, color: Colors.grey.shade600)),
+                    child: Text(
+                       _userName.isNotEmpty ? _userName[0].toUpperCase() : "U",
+                       style: GoogleFonts.publicSans(fontSize: 24, fontWeight: FontWeight.bold, color: federalBlue),
+                    )),
                 const SizedBox(width: 16),
                 Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text("Welcome back,",
+                    Text(_userName.isNotEmpty ? "Hi, $_userName" : "Welcome back,",
                         style: GoogleFonts.publicSans(
                             color: federalBlue,
                             fontSize: 20,
@@ -109,7 +173,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       fit: StackFit.expand,
                       children: [
                         CircularProgressIndicator(
-                            value: _passProbability, // Dynamic Value
+                            value: _passProbability,
                             strokeWidth: 12,
                             backgroundColor: Colors.grey.shade200,
                             color: _isPassed ? libertyGreen : (_passProbability > 0 ? Colors.redAccent : Colors.grey)),
@@ -123,11 +187,11 @@ class _HomeScreenState extends State<HomeScreen> {
                     ),
                   ),
                   const SizedBox(height: 16),
-                  Text(_statusLabel, // Dynamic Label
+                  Text(_statusLabel,
                       style: GoogleFonts.publicSans(
                           fontSize: 18,
                           fontWeight: FontWeight.bold,
-                          color: _statusColor)), // Dynamic Color
+                          color: _statusColor)),
                 ],
               ),
             ),
@@ -146,7 +210,7 @@ class _HomeScreenState extends State<HomeScreen> {
                             context,
                             MaterialPageRoute(
                                 builder: (context) => const QuizScreen()),
-                          ).then((_) => _loadStats()); // Reload on return
+                          ).then((_) => _loadStats());
                         },
                         child: _buildActionCard(
                           icon: Icons.assignment,
@@ -161,7 +225,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       child: GestureDetector(
                         onTap: () {
                           Navigator.pushNamed(context, '/voice')
-                              .then((_) => _loadStats()); // Reload on return
+                              .then((_) => _loadStats());
                         },
                         child: _buildActionCard(
                           icon: Icons.mic,
@@ -201,10 +265,9 @@ class _HomeScreenState extends State<HomeScreen> {
                     Expanded(
                       child: GestureDetector(
                         onTap: () {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(
-                                content:
-                                    Text("N-400 Vocabulary Coming Soon!")),
+                           Navigator.push(
+                            context,
+                            MaterialPageRoute(builder: (context) => const N400VocabScreen()),
                           );
                         },
                         child: _buildActionCard(
@@ -221,15 +284,6 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
           ],
         ),
-      ),
-      bottomNavigationBar: BottomNavigationBar(
-        selectedItemColor: federalBlue,
-        unselectedItemColor: Colors.grey,
-        items: const [
-          BottomNavigationBarItem(icon: Icon(Icons.dashboard), label: "Home"),
-          BottomNavigationBarItem(icon: Icon(Icons.school), label: "Study"),
-          BottomNavigationBarItem(icon: Icon(Icons.person), label: "Profile"),
-        ],
       ),
     );
   }

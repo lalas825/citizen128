@@ -1,0 +1,97 @@
+[
+    {
+        "type": "intro",
+        "title": "N-400 Vocabulary Guide",
+        "content": "Officers often ask applicants to define these complex legal terms in \"simple English\" to verify they understand what they are signing, rather than just memorizing \"No\" answers.\n\nInsight for Your Preparation:\nThe research indicates that while most applicants focus on the 100 (or 128) civics questions, the \"N-400 Vocabulary\" is often the \"invisible barrier\" where applicants freeze.\n\nAnalogy: Think of the N-400 vocabulary like the safety warning signs on a road. The Civics Test is knowing the rules of the road, but the N-400 vocabulary ensures you aren't bringing anything dangerous into the car."
+    },
+    {
+        "type": "section",
+        "title": "1. High-Risk Legal & Moral Terms",
+        "content": "These terms appear in questions asking if you have ever committed crimes or participated in bad groups. Failing to define these can be a \"red flag\"."
+    },
+    {
+        "type": "term",
+        "term": "Genocide",
+        "definition": "Killing a group of people because of their race or religion"
+    },
+    {
+        "type": "term",
+        "term": "Persecution",
+        "definition": "Hurting someone because of their religion, race, or political opinion"
+    },
+    {
+        "type": "term",
+        "term": "Totalitarianism",
+        "definition": "When the government has total control over everything and people have no power"
+    },
+    {
+        "type": "term",
+        "term": "Communism",
+        "definition": "No private property. The government owns everything"
+    },
+    {
+        "type": "term",
+        "term": "Terrorist Organization",
+        "definition": "A group that uses violence against people and the government"
+    },
+    {
+        "type": "term",
+        "term": "Torture",
+        "definition": "Badly hurting someone on purpose"
+    },
+    {
+        "type": "section",
+        "title": "2. Oath and Military Terms",
+        "content": "These terms appear in the final section where you promise loyalty to the U.S. You typically must answer \"Yes\" to these questions."
+    },
+    {
+        "type": "term",
+        "term": "Oath of Allegiance",
+        "definition": "A promise to be loyal to the United States"
+    },
+    {
+        "type": "term",
+        "term": "Bear Arms",
+        "definition": "To carry a weapon to protect the country"
+    },
+    {
+        "type": "term",
+        "term": "Non-combatant Services",
+        "definition": "Helping the army without fighting (like working as a cook or a doctor)"
+    },
+    {
+        "type": "term",
+        "term": "Work of National Importance",
+        "definition": "Helping the country in a major emergency (like a disaster)"
+    },
+    {
+        "type": "section",
+        "title": "3. Status and Administrative Terms",
+        "content": "These terms clarify your current standing and honesty."
+    },
+    {
+        "type": "term",
+        "term": "Hereditary Title",
+        "definition": "A royal title like Prince or King (you must give this up to become a citizen)"
+    },
+    {
+        "type": "term",
+        "term": "Mental Institution",
+        "definition": "A hospital for people with mental health problems"
+    },
+    {
+        "type": "term",
+        "term": "Claim to be a U.S. Citizen",
+        "definition": "To lie and say you are a citizen when you are not"
+    },
+    {
+        "type": "term",
+        "term": "Non-Resident",
+        "definition": "A person who does not live in a specific place"
+    },
+    {
+        "type": "term",
+        "term": "Marital Status",
+        "definition": "Whether you are married, single, divorced, or widowed"
+    }
+]
