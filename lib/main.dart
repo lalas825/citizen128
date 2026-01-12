@@ -7,9 +7,9 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'firebase_options.dart';
 
 import 'src/ui/screens/profile_setup_screen.dart';
+import 'src/ui/screens/profile_setup_screen.dart';
 import 'src/ui/screens/login_screen.dart';
-import 'src/logic/viewmodels/onboarding_viewmodel.dart';
-import 'src/ui/screens/onboarding_screen.dart';
+import 'src/ui/screens/signup_screen.dart'; // Added
 import 'src/ui/screens/home_screen.dart';
 import 'src/ui/screens/voice_practice_screen.dart';
 // Note: QuizScreen might be imported in HomeScreen directly or used via named route if we register it.
@@ -17,6 +17,7 @@ import 'src/ui/screens/voice_practice_screen.dart';
 
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'src/logic/providers/user_provider.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -24,18 +25,11 @@ void main() async {
     options: DefaultFirebaseOptions.currentPlatform,
   );
   
-  // Check onboarding status
-  final prefs = await SharedPreferences.getInstance();
-  final bool hasSeenOnboarding = true; // Forced for testing
+  String initialRoute = '/login';
 
-  String initialRoute = '/onboarding';
-
-  if (hasSeenOnboarding) {
-    initialRoute = '/login';
-    
-    // Check Auth State
-    final user = FirebaseAuth.instance.currentUser;
-    if (user != null) {
+  // Check Auth State
+  final user = FirebaseAuth.instance.currentUser;
+  if (user != null) {
       // Check Profile State
       try {
         final userDoc = await FirebaseFirestore.instance.collection('users').doc(user.uid).get();
@@ -48,7 +42,6 @@ void main() async {
         // Fallback to login on error
         initialRoute = '/login';
       }
-    }
   }
 
   runApp(MyApp(initialRoute: initialRoute));
@@ -63,7 +56,7 @@ class MyApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MultiProvider(
       providers: [
-        ChangeNotifierProvider(create: (_) => OnboardingViewModel()),
+        ChangeNotifierProvider(create: (_) => UserProvider()),
       ],
       child: MaterialApp(
         title: 'Citizen 128',
@@ -79,8 +72,8 @@ class MyApp extends StatelessWidget {
         ),
         initialRoute: initialRoute,
         routes: {
-          '/onboarding': (context) => const OnboardingScreen(),
           '/login': (context) => const LoginScreen(),
+          '/signup': (context) => const SignUpScreen(),
           '/profile_setup': (context) => const ProfileSetupScreen(),
           '/home': (context) => const HomeScreen(),
           '/voice': (context) => const VoicePracticeScreen(),

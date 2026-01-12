@@ -4,6 +4,8 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
+import '../theme/app_colors.dart';
+import 'signup_screen.dart'; // Ensure direct import if route not defined yet, but user asked for route
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -51,7 +53,6 @@ class _LoginScreenState extends State<LoginScreen> {
         );
       }
     } catch (e) {
-      // Catch Firestore or other errors
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -65,6 +66,53 @@ class _LoginScreenState extends State<LoginScreen> {
         setState(() => _isLoading = false);
       }
     }
+  }
+
+  void _showForgotPasswordDialog() {
+    final resetEmailController = TextEditingController();
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text("Reset Password"),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text("Enter your email to receive a password reset link."),
+            const SizedBox(height: 10),
+            TextField(
+              controller: resetEmailController,
+              decoration: const InputDecoration(labelText: "Email", border: OutlineInputBorder()),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text("Cancel")),
+          ElevatedButton(
+            onPressed: () async {
+              if (resetEmailController.text.isEmpty) return;
+              try {
+                await FirebaseAuth.instance.sendPasswordResetEmail(email: resetEmailController.text.trim());
+                if (context.mounted) {
+                  Navigator.pop(context);
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text("Reset link sent! Check your email."), backgroundColor: Colors.green),
+                  );
+                }
+              } catch (e) {
+                 if (context.mounted) {
+                  Navigator.pop(context);
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text("Error: $e"), backgroundColor: Colors.red),
+                  );
+                }
+              }
+            },
+            style: ElevatedButton.styleFrom(backgroundColor: AppColors.navyBlue, foregroundColor: Colors.white),
+            child: const Text("Send"),
+          ),
+        ],
+      ),
+    );
   }
 
   @override
@@ -134,9 +182,11 @@ class _LoginScreenState extends State<LoginScreen> {
                                 borderRadius: BorderRadius.circular(12),
                               ),
                               focusedBorder: OutlineInputBorder(
-                                borderSide: const BorderSide(color: Colors.white),
+                                borderSide: const BorderSide(color: AppColors.navyBlue, width: 2),
                                 borderRadius: BorderRadius.circular(12),
                               ),
+                              filled: true,
+                              fillColor: Colors.black.withOpacity(0.1),
                             ),
                             validator: (value) => 
                               value?.isEmpty ?? true ? 'Please enter email' : null,
@@ -157,14 +207,26 @@ class _LoginScreenState extends State<LoginScreen> {
                                 borderRadius: BorderRadius.circular(12),
                               ),
                               focusedBorder: OutlineInputBorder(
-                                borderSide: const BorderSide(color: Colors.white),
+                                borderSide: const BorderSide(color: AppColors.navyBlue, width: 2),
                                 borderRadius: BorderRadius.circular(12),
                               ),
+                              filled: true,
+                              fillColor: Colors.black.withOpacity(0.1),
                             ),
                             validator: (value) => 
                               value?.isEmpty ?? true ? 'Please enter password' : null,
                           ),
-                          const SizedBox(height: 24),
+                          
+                          // Forgot Password
+                          Align(
+                            alignment: Alignment.centerRight,
+                            child: TextButton(
+                              onPressed: _showForgotPasswordDialog,
+                              child: const Text("Forgot Password?", style: TextStyle(color: Colors.white70, fontSize: 12)),
+                            ),
+                          ),
+                          
+                          const SizedBox(height: 16),
                           
                           // Login Button
                           SizedBox(
@@ -173,7 +235,7 @@ class _LoginScreenState extends State<LoginScreen> {
                             child: ElevatedButton(
                               onPressed: _isLoading ? null : _login,
                               style: ElevatedButton.styleFrom(
-                                backgroundColor: const Color(0xFF00C4B4), // Brand Teal
+                                backgroundColor: AppColors.navyBlue, // Navy Blue
                                 foregroundColor: Colors.white,
                                 shape: RoundedRectangleBorder(
                                   borderRadius: BorderRadius.circular(12),
@@ -192,6 +254,21 @@ class _LoginScreenState extends State<LoginScreen> {
                                     ),
                             ),
                           ),
+                          const SizedBox(height: 16),
+                          
+                          // Sign Up Link
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              const Text("Don't have an account?", style: TextStyle(color: Colors.white70)),
+                              TextButton(
+                                onPressed: () {
+                                  Navigator.pushNamed(context, '/signup'); 
+                                },
+                                child: const Text("Sign Up", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                              )
+                            ],
+                          )
                         ],
                       ),
                     ),

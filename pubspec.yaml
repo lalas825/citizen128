@@ -45,6 +45,10 @@ dependencies:
   http: ^1.2.0
   image_picker: ^1.0.7
   cloud_firestore: ^6.1.1
+  firebase_storage: ^13.0.5
+  flutter_tts: ^4.2.5
+  confetti: ^0.8.0
+  audioplayers: ^6.5.1
 
 dev_dependencies:
   flutter_test:
@@ -94,6 +98,8 @@ flutter:
     - assets/icon/app_icon.png
     - assets/icon/splash_bg.png
     - assets/icon/login_bg.png
+    - assets/images/
+    - assets/audio/questions/
 
   # An image asset can refer to one or more resolution-specific "variants", see
   # https://flutter.dev/to/resolution-aware-images

@@ -3,8 +3,13 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:intl/intl.dart';
 import 'package:image_picker/image_picker.dart';
-import 'dart:io';
+import 'package:provider/provider.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_storage/firebase_storage.dart';
 import '../../services/civic_info_service.dart';
+import '../../logic/providers/user_provider.dart';
+import '../theme/app_colors.dart';
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
@@ -17,13 +22,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
   // State Variables
   final TextEditingController _nameController = TextEditingController();
   DateTime? _examDate;
-  double _voiceSpeed = 1.0;
-  bool _notificationsEnabled = true;
-  bool _darkModeEnabled = false;
   bool _isLoading = true;
   
   // Image State
-  String? _profileImagePath;
   final ImagePicker _picker = ImagePicker();
 
   // Civic Info State
@@ -37,114 +38,97 @@ class _ProfileScreenState extends State<ProfileScreen> {
   @override
   void initState() {
     super.initState();
-    _loadProfileData();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _loadProfileData();
+    });
   }
 
-  // Load Data from SharedPreferences
+  // Load Data from UserProvider
   Future<void> _loadProfileData() async {
-    final prefs = await SharedPreferences.getInstance();
+    final userProvider = Provider.of<UserProvider>(context, listen: false);
+    await userProvider.refresh();
+    
+    if (!mounted) return;
+    
     setState(() {
-      _nameController.text = prefs.getString('user_name') ?? "";
+      _nameController.text = userProvider.userName ?? "";
+      _examDate = userProvider.examDate;
+      _zipController.text = userProvider.zipCode ?? "";
       
-      final dateStr = prefs.getString('exam_date');
-      if (dateStr != null) {
-        _examDate = DateTime.tryParse(dateStr);
+      if (_zipController.text.length == 5 && _governorController.text.isEmpty) {
+         _fetchCivicInfo(); 
       }
-
-      _voiceSpeed = prefs.getDouble('voice_speed') ?? 1.0;
-      _notificationsEnabled = prefs.getBool('notifications_enabled') ?? true;
-      _darkModeEnabled = prefs.getBool('dark_mode_enabled') ?? false;
-      _profileImagePath = prefs.getString('profile_image_path');
       
-
-      
-      _zipController.text = prefs.getString('civic_zip') ?? "";
-      _governorController.text = prefs.getString('civic_governor') ?? "";
-      _senator1Controller.text = prefs.getString('civic_senator1') ?? "";
-      _senator2Controller.text = prefs.getString('civic_senator2') ?? "";
-      _repController.text = prefs.getString('civic_rep') ?? "";
-
       _isLoading = false;
     });
   }
 
   // Save Data Helpers
+  Future<void> _updateFirestore(Map<String, dynamic> data) async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user != null) {
+      await FirebaseFirestore.instance.collection('users').doc(user.uid).set(
+        data, SetOptions(merge: true)
+      );
+      if (mounted) {
+         Provider.of<UserProvider>(context, listen: false).refresh();
+      }
+    }
+  }
+
   Future<void> _saveName(String value) async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString('user_name', value);
-    setState(() {}); // Trigger rebuild to update Avatar if relying on initials
+    setState(() {}); 
+    await _updateFirestore({'name': value});
   }
 
   Future<void> _saveExamDate(DateTime date) async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString('exam_date', date.toIso8601String());
     setState(() {
       _examDate = date;
     });
-  }
-
-  Future<void> _saveVoiceSpeed(double value) async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setDouble('voice_speed', value);
-    setState(() {
-      _voiceSpeed = value;
-    });
-  }
-
-  Future<void> _toggleNotifications(bool value) async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool('notifications_enabled', value);
-    setState(() {
-      _notificationsEnabled = value;
-    });
-  }
-
-  Future<void> _toggleDarkMode(bool value) async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool('dark_mode_enabled', value);
-    setState(() {
-      _darkModeEnabled = value;
-    });
-    // Note: Theme change requires top-level callback in real app
-    ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Theme preference saved (Refresh needed)")));
+    await _updateFirestore({'interview_date': Timestamp.fromDate(date)});
   }
   
-  // Image Picker Logic
+  Future<void> _signOut() async {
+    await FirebaseAuth.instance.signOut();
+    if (mounted) {
+       Navigator.of(context).pushNamedAndRemoveUntil('/login', (route) => false);
+    }
+  }
+
+  // Image Picker Logic 
   Future<void> _pickImage() async {
     try {
-      final XFile? image = await _picker.pickImage(source: ImageSource.gallery);
+      final XFile? image = await _picker.pickImage(source: ImageSource.gallery, imageQuality: 80);
       if (image != null) {
-        final prefs = await SharedPreferences.getInstance();
-        await prefs.setString('profile_image_path', image.path);
-        setState(() {
-          _profileImagePath = image.path;
-        });
+        setState(() => _isLoading = true);
+        final user = FirebaseAuth.instance.currentUser;
+        if (user != null) {
+           final bytes = await image.readAsBytes();
+           final ref = FirebaseStorage.instance.ref().child('user_photos').child('${user.uid}.jpg');
+           await ref.putData(bytes);
+           final url = await ref.getDownloadURL();
+           await _updateFirestore({'photo_url': url});
+        }
+        setState(() => _isLoading = false);
       }
     } catch (e) {
       debugPrint("Error picking image: $e");
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Failed to pick image")),
-      );
+      setState(() => _isLoading = false);
     }
-    }
-
+  }
 
   // Civic Info Logic
   Future<void> _fetchCivicInfo() async {
     final zip = _zipController.text.trim();
     if (zip.isEmpty || zip.length != 5) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Please enter a valid 5-digit Zip Code"))
-      );
+      if (_isSearchingCivic) return; 
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Please enter a valid 5-digit Zip Code")));
       return;
     }
 
     setState(() => _isSearchingCivic = true);
-
     try {
       final data = await CivicInfoService.fetchRepresentatives(zip);
-      
       final governor = data['governor'] ?? "Not Found";
       final senators = data['senators'] as List<dynamic>? ?? [];
       final rep = data['representative'] ?? "Not Found";
@@ -156,81 +140,27 @@ class _ProfileScreenState extends State<ProfileScreen> {
         _repController.text = rep;
       });
 
-      // Save to Prefs
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setString('civic_zip', zip);
-      await prefs.setString('civic_governor', _governorController.text);
-      await prefs.setString('civic_senator1', _senator1Controller.text);
-      await prefs.setString('civic_senator2', _senator2Controller.text);
-      await prefs.setString('civic_rep', _repController.text);
-
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text("Officials Updated!"), backgroundColor: Colors.green)
-        );
-      }
+      // Also Update User Profile with Zip for permanence
+      _updateFirestore({'zip_code': zip});
 
     } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text("Error: $e"), backgroundColor: Colors.red)
-        );
-      }
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Error: $e"), backgroundColor: Colors.red));
     } finally {
       if (mounted) setState(() => _isSearchingCivic = false);
     }
   }
 
-  // Reset Logic
-  Future<void> _resetProgress() async {
-    final prefs = await SharedPreferences.getInstance();
-    // CLEAR EVERYTHING
-    await prefs.clear();
-    
-    if (mounted) {
-      // Navigate to Onboarding and remove back stack
-      Navigator.pushNamedAndRemoveUntil(context, '/onboarding', (route) => false);
-    }
-  }
-
-  // Logic: Calculate Days Until Exam
-  String _getDaysUntilExam() {
-    if (_examDate == null) return "Set Exam Date";
-    final now = DateTime.now();
-    // Reset time to midnight for accurate day comparison
-    final today = DateTime(now.year, now.month, now.day);
-    final exam = DateTime(_examDate!.year, _examDate!.month, _examDate!.day);
-    final difference = exam.difference(today).inDays;
-
-    if (difference < 0) return "Included Exam Date"; // Or "Exam Passed"
-    return "$difference Days Until Interview";
-  }
-
   @override
   Widget build(BuildContext context) {
-    if (_isLoading) {
-      return const Scaffold(body: Center(child: CircularProgressIndicator()));
-    }
+    if (_isLoading) return const Scaffold(body: Center(child: CircularProgressIndicator()));
 
-    // Colors
-    final Color federalBlue = const Color(0xFF112D50);
+    final Color federalBlue = AppColors.navyBlue; // Updated to Navy Blue
     final Color sectionTitleColor = Colors.grey.shade700;
     
-    // Avatar Image Provider
-    ImageProvider? avatarImage;
-    if (_profileImagePath != null) {
-      final file = File(_profileImagePath!);
-      if (file.existsSync()) {
-        avatarImage = FileImage(file);
-      }
-    }
-
     return Scaffold(
       backgroundColor: const Color(0xFFF8FAFC),
       appBar: AppBar(
-        title: Text("Study Command Center", 
-          style: GoogleFonts.publicSans(color: federalBlue, fontWeight: FontWeight.bold)
-        ),
+        title: Text("Profile", style: GoogleFonts.publicSans(color: federalBlue, fontWeight: FontWeight.bold)),
         backgroundColor: Colors.white,
         elevation: 0,
         automaticallyImplyLeading: false, 
@@ -240,62 +170,122 @@ class _ProfileScreenState extends State<ProfileScreen> {
         child: Column(
            crossAxisAlignment: CrossAxisAlignment.start,
            children: [
-             // --- HEADER SECTION ---
-             Center(
-               child: Column(
-                 children: [
-                   GestureDetector(
-                     onTap: _pickImage,
-                     child: Stack(
-                       children: [
-                         CircleAvatar(
-                           radius: 50,
-                           backgroundColor: federalBlue.withOpacity(0.1),
-                           backgroundImage: avatarImage,
-                           child: avatarImage == null
-                               ? Text(
-                                   _nameController.text.isNotEmpty ? _nameController.text[0].toUpperCase() : "U",
-                                   style: GoogleFonts.publicSans(fontSize: 40, color: federalBlue, fontWeight: FontWeight.bold),
-                                 )
-                               : null, // Show nothing if image is there
-                         ),
-                         // Camera Icon Overlay
-                         Positioned(
-                           bottom: 0,
-                           right: 0,
-                           child: Container(
-                             padding: const EdgeInsets.all(4),
-                             decoration: const BoxDecoration(
-                               color: Colors.white,
-                               shape: BoxShape.circle,
-                               boxShadow: [BoxShadow(color: Colors.black26, blurRadius: 4)]
+             // --- HEADER (PHOTO + NAME) ---
+             Consumer<UserProvider>(
+               builder: (context, userProvider, _) {
+                 final photo = userProvider.photoUrl;
+                 return Center(
+                   child: Column(
+                     children: [
+                       GestureDetector(
+                         onTap: _pickImage,
+                         child: Stack(
+                           children: [
+                             CircleAvatar(
+                               radius: 50,
+                               backgroundColor: federalBlue.withOpacity(0.1),
+                               backgroundImage: photo != null ? NetworkImage(photo) : null,
+                               child: photo == null
+                                   ? Text(
+                                       _nameController.text.isNotEmpty ? _nameController.text[0].toUpperCase() : "U",
+                                       style: GoogleFonts.publicSans(fontSize: 40, color: federalBlue, fontWeight: FontWeight.bold),
+                                     )
+                                   : null,
                              ),
-                             child: Icon(Icons.camera_alt, color: federalBlue, size: 20),
-                           ),
-                         )
-                       ],
-                     ),
+                             Positioned(
+                               bottom: 0, right: 0,
+                               child: Container(
+                                 padding: const EdgeInsets.all(4),
+                                 decoration: const BoxDecoration(color: Colors.white, shape: BoxShape.circle, boxShadow: [BoxShadow(color: Colors.black26, blurRadius: 4)]),
+                                 child: Icon(Icons.camera_alt, color: federalBlue, size: 20),
+                               ),
+                             )
+                           ],
+                         ),
+                       ),
+                       const SizedBox(height: 16),
+                       TextField(
+                         controller: _nameController,
+                         textAlign: TextAlign.center,
+                         style: GoogleFonts.publicSans(fontSize: 22, fontWeight: FontWeight.bold, color: federalBlue),
+                         decoration: const InputDecoration(hintText: "Enter Your Name", border: InputBorder.none, hintStyle: TextStyle(color: Colors.grey)),
+                         onChanged: _saveName, 
+                       ),
+                     ],
                    ),
-                   const SizedBox(height: 16),
-                   // Editable Name
-                   TextField(
-                     controller: _nameController,
-                     textAlign: TextAlign.center,
-                     style: GoogleFonts.publicSans(fontSize: 22, fontWeight: FontWeight.bold, color: federalBlue),
-                     decoration: const InputDecoration(
-                       hintText: "Enter Your Name",
-                       border: InputBorder.none,
-                       hintStyle: TextStyle(color: Colors.grey)
-                     ),
-                     onChanged: _saveName, 
-                   ),
-                 ],
-               ),
+                 );
+               }
              ),
              const SizedBox(height: 32),
              
-             // --- MY LOCAL GOVERNMENT ---
-             Text("MY LOCAL GOVERNMENT", style: GoogleFonts.publicSans(color: sectionTitleColor, fontWeight: FontWeight.bold, fontSize: 13, letterSpacing: 1.2)),
+             // --- SECTION A: CASE DETAILS ---
+             Text("CASE DETAILS", style: GoogleFonts.publicSans(color: sectionTitleColor, fontWeight: FontWeight.bold, fontSize: 13, letterSpacing: 1.2)),
+             const SizedBox(height: 8),
+             Card(
+                elevation: 0,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12), side: BorderSide(color: Colors.grey.shade200)),
+                child: Column(
+                  children: [
+                    // Interview Date
+                    ListTile(
+                      leading: const Icon(Icons.calendar_today, color: Colors.blueAccent),
+                      title: Text(_examDate == null ? "Set Exam Date" : DateFormat.yMMMMd().format(_examDate!), style: GoogleFonts.publicSans(fontWeight: FontWeight.w600)),
+                      trailing: const Icon(Icons.edit, size: 18, color: Colors.grey),
+                      onTap: () async {
+                        final DateTime? picked = await showDatePicker(
+                          context: context,
+                          initialDate: _examDate ?? DateTime.now(),
+                          firstDate: DateTime.now(),
+                          lastDate: DateTime.now().add(const Duration(days: 730)),
+                        );
+                        if (picked != null) _saveExamDate(picked);
+                      },
+                    ),
+                    const Divider(height: 1),
+                    // Version Toggle
+                    Consumer<UserProvider>(
+                      builder: (context, userProvider, _) {
+                        // Logic: '2025' means new/Trump/Strict version. '2008' means Standard.
+                        // Default in Provider is '2020'. Let's map 2020->2025 for clarity or treat 2020 as 2008?
+                        // User Prompt: "2008 Version (100Q) vs 2025 Version (128Q)"
+                        final current = userProvider.studyVersion;
+                        final is2025 = (current == '2025' || current == '2020'); 
+                        
+                        return Padding(
+                          padding: const EdgeInsets.all(16.0),
+                          child: Row(
+                            children: [
+                              const Icon(Icons.quiz, color: Colors.orangeAccent),
+                              const SizedBox(width: 16),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text("Civics Version", style: GoogleFonts.publicSans(fontWeight: FontWeight.w600)),
+                                    Text(is2025 ? "128 Questions (2020/2025)" : "100 Questions (2008)", style: GoogleFonts.publicSans(fontSize: 12, color: Colors.grey)),
+                                  ],
+                                )
+                              ),
+                              Switch(
+                                value: is2025, 
+                                activeColor: const Color(0xFF00C4B4),
+                                onChanged: (val) {
+                                  // Toggle
+                                  userProvider.updateVersion(val ? '2025' : '2008');
+                                }
+                              )
+                            ],
+                          ),
+                        );
+                      }
+                    )
+                  ],
+                ),
+             ),
+             const SizedBox(height: 32),
+
+             // --- SECTION B: LOCATION ---
+             Text("LOCATION & REPS", style: GoogleFonts.publicSans(color: sectionTitleColor, fontWeight: FontWeight.bold, fontSize: 13, letterSpacing: 1.2)),
              const SizedBox(height: 8),
              Card(
                 elevation: 0,
@@ -304,7 +294,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   padding: const EdgeInsets.all(16.0),
                   child: Column(
                     children: [
-                      // Zip Search Row
                       Row(
                         children: [
                           Expanded(
@@ -313,7 +302,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
                               keyboardType: TextInputType.number,
                               decoration: InputDecoration(
                                 labelText: "Zip Code",
-                                hintText: "Enter Zip",
                                 border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
                                 contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                               ),
@@ -321,10 +309,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                           ),
                           const SizedBox(width: 8),
                           Container(
-                            decoration: BoxDecoration(
-                              color: federalBlue,
-                              borderRadius: BorderRadius.circular(8)
-                            ),
+                            decoration: BoxDecoration(color: federalBlue, borderRadius: BorderRadius.circular(8)),
                             child: IconButton(
                               icon: _isSearchingCivic 
                                   ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
@@ -335,139 +320,31 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         ],
                       ),
                       const SizedBox(height: 16),
-                      // Fields
-                      _buildCivicField("My Governor", _governorController),
+                      _buildCivicField("Governor", _governorController),
                       const SizedBox(height: 12),
-                      _buildCivicField("My Senator 1", _senator1Controller),
+                      _buildCivicField("Senator 1", _senator1Controller),
                       const SizedBox(height: 12),
-                      _buildCivicField("My Senator 2", _senator2Controller),
+                      _buildCivicField("Senator 2", _senator2Controller),
                       const SizedBox(height: 12),
-                      _buildCivicField("My Representative", _repController),
+                      _buildCivicField("Representative", _repController),
                     ],
                   ),
                 ),
              ),
-             const SizedBox(height: 32),
 
-             // --- EXAM DETAILS ---
-             Text("EXAM DETAILS", style: GoogleFonts.publicSans(color: sectionTitleColor, fontWeight: FontWeight.bold, fontSize: 13, letterSpacing: 1.2)),
-             const SizedBox(height: 8),
-             Card(
-               elevation: 0,
-               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12), side: BorderSide(color: Colors.grey.shade200)),
-               child: ListTile(
-                 leading: const Icon(Icons.calendar_today, color: Colors.blueAccent),
-                 title: Text(_examDate == null ? "Set Exam Date" : DateFormat.yMMMMd().format(_examDate!), 
-                   style: GoogleFonts.publicSans(fontWeight: FontWeight.w600)
-                 ),
-                 subtitle: const Text("Tap to select your interview date"),
-                 trailing: const Icon(Icons.chevron_right, color: Colors.grey),
-                 onTap: () async {
-                   final DateTime? picked = await showDatePicker(
-                     context: context,
-                     initialDate: _examDate ?? DateTime.now().add(const Duration(days: 30)),
-                     firstDate: DateTime.now(),
-                     lastDate: DateTime.now().add(const Duration(days: 365 * 2)),
-                   );
-                   if (picked != null) {
-                     _saveExamDate(picked);
-                   }
-                 },
-               ),
-             ),
-             const SizedBox(height: 32),
-
-             // --- SETTINGS ---
-             Text("SETTINGS", style: GoogleFonts.publicSans(color: sectionTitleColor, fontWeight: FontWeight.bold, fontSize: 13, letterSpacing: 1.2)),
-             const SizedBox(height: 8),
-             Card(
-               elevation: 0,
-               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12), side: BorderSide(color: Colors.grey.shade200)),
-               child: Column(
-                 children: [
-                   // Voice Speed
-                   Padding(
-                     padding: const EdgeInsets.all(16.0),
-                     child: Column(
-                       crossAxisAlignment: CrossAxisAlignment.start,
-                       children: [
-                         Row(
-                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                           children: [
-                               Text("Interviewer Voice Speed", style: GoogleFonts.publicSans(fontWeight: FontWeight.w600)),
-                               Text("${_voiceSpeed.toStringAsFixed(1)}x", style: GoogleFonts.publicSans(fontWeight: FontWeight.bold, color: federalBlue)),
-                           ],
-                         ),
-                         Slider(
-                           value: _voiceSpeed,
-                           min: 0.5,
-                           max: 1.5,
-                           divisions: 10,
-                           activeColor: federalBlue,
-                           onChanged: _saveVoiceSpeed,
-                         ),
-                       ],
-                     ),
-                   ),
-                   const Divider(height: 1),
-                   
-                   // Notifications
-                   SwitchListTile(
-                     title: Text("Daily Reminders", style: GoogleFonts.publicSans(fontWeight: FontWeight.w600)),
-                     subtitle: const Text("Get study reminders at 9:00 AM"),
-                     value: _notificationsEnabled,
-                     activeColor: const Color(0xFF00C4B4),
-                     onChanged: _toggleNotifications,
-                   ),
-                    const Divider(height: 1),
-
-                   // Dark Mode
-                   SwitchListTile(
-                     title: Text("Dark Mode", style: GoogleFonts.publicSans(fontWeight: FontWeight.w600)),
-                     value: _darkModeEnabled,
-                     activeColor: const Color(0xFF00C4B4),
-                     onChanged: _toggleDarkMode,
-                   ),
-                 ],
-               ),
-             ),
-             const SizedBox(height: 32),
-
-             // --- DANGER ZONE ---
-             Text("DANGER ZONE", style: GoogleFonts.publicSans(color: Colors.redAccent, fontWeight: FontWeight.bold, fontSize: 13, letterSpacing: 1.2)),
-             const SizedBox(height: 8),
+             const SizedBox(height: 40),
+             
+             // --- FOOTER: LOGOUT ---
              SizedBox(
                width: double.infinity,
-               child: OutlinedButton(
-                 onPressed: () {
-                   showDialog(
-                     context: context, 
-                     builder: (context) => AlertDialog(
-                       title: const Text("Reset All Progress?"),
-                       content: const Text("This will delete ALL data (name, date, photos, scores) and restart the app."),
-                       actions: [
-                         TextButton(onPressed: () => Navigator.pop(context), child: const Text("Cancel")),
-                         TextButton(
-                           onPressed: () {
-                             Navigator.pop(context); // Close dialog
-                             _resetProgress();
-                           }, 
-                           child: const Text("Reset Everything", style: TextStyle(color: Colors.red))
-                          ),
-                       ],
-                     )
-                   );
-                 },
-                 style: OutlinedButton.styleFrom(
-                   foregroundColor: Colors.red,
-                   side: const BorderSide(color: Colors.red),
-                   padding: const EdgeInsets.symmetric(vertical: 16),
-                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))
-                 ),
-                 child: Text("Reset All Progress", style: GoogleFonts.publicSans(fontWeight: FontWeight.bold)),
+               child: TextButton.icon(
+                 onPressed: _signOut,
+                 icon: const Icon(Icons.logout, color: Colors.red),
+                 label: Text("Log Out", style: GoogleFonts.publicSans(color: Colors.red, fontWeight: FontWeight.bold, fontSize: 16)),
+                 style: TextButton.styleFrom(padding: const EdgeInsets.symmetric(vertical: 16)),
                ),
              ),
-             const SizedBox(height: 40),
+             const SizedBox(height: 20),
            ],
         ),
       ),
